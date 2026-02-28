@@ -17,7 +17,13 @@ def _build_async_url(url: str) -> str:
     return url
 
 
-DATABASE_URL = _build_async_url(os.getenv("DATABASE_URL", ""))
+_raw_db_url = os.getenv("DATABASE_URL", "")
+if not _raw_db_url:
+    raise RuntimeError(
+        "DATABASE_URL environment variable is not set. "
+        "Please add it in Railway → Variables."
+    )
+DATABASE_URL = _build_async_url(_raw_db_url)
 
 engine = create_async_engine(
     DATABASE_URL,
