@@ -34,7 +34,8 @@ from ai_engine import generate_reply
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-VERIFY_TOKEN = os.getenv("VERIFY_TOKEN", "")
+def get_verify_token() -> str:
+    return os.getenv("VERIFY_TOKEN", "")
 WHATSAPP_API_URL = "https://graph.facebook.com/v19.0"
 
 FALLBACK_MEDIA_MESSAGE = (
@@ -64,8 +65,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Replify API", lifespan=lifespan)
 
-_raw_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:5173")
-allowed_origins = [o.strip() for o in _raw_origins.split(",") if o.strip()]
+allowed_origins = ["*"]
 
 app.add_middleware(
     CORSMiddleware,
@@ -160,7 +160,7 @@ async def verify_webhook(request: Request):
     token = params.get("hub.verify_token")
     challenge = params.get("hub.challenge")
 
-    if mode == "subscribe" and token == VERIFY_TOKEN:
+    if mode == "subscribe" and token == get_verify_token():
         logger.info("Webhook verified successfully.")
         return PlainTextResponse(content=challenge, status_code=200)
 
