@@ -1,0 +1,43 @@
+import os
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+from sqlalchemy.orm import sessionmaker, DeclarativeBase
+
+
+class Base(DeclarativeBase):
+    pass
+
+
+def _build_async_url(url: str) -> str:
+    """Ensure the DATABASE_URL uses the asyncpg driver."""
+    if url.startswith("postgresql://"):
+        return url.replace("postgresql://", "postgresql+asyncpg://", 1)
+    if url.startswith("postgres://"):
+        # Heroku-style shorthand
+        return url.replace("postgres://", "postgresql+asyncpg://", 1)
+    return url
+
+
+DATABASE_URL = _build_async_url(os.getenv("DATABASE_URL", ""))
+
+engine = create_async_engine(
+    DATABASE_URL,
+    echo=False,
+    connect_args={"statement_cache_size": 0},
+)
+
+AsyncSessionLocal = sessionmaker(
+    bind=engine,
+    class_=AsyncSession,
+    expire_on_commit=False,
+)
+
+
+async def get_db():
+    async with AsyncSessionLocal() as session:
+        yield session
+
+
+async def init_db():
+    import database.models  # noqa: F401 — ensures all models are registered on Base
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
