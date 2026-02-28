@@ -149,6 +149,21 @@ async def root():
 
 
 # ---------------------------------------------------------------------------
+# Health / debug
+# ---------------------------------------------------------------------------
+
+@app.get("/health")
+async def health():
+    return {
+        "status": "ok",
+        "VERIFY_TOKEN": "SET" if os.getenv("VERIFY_TOKEN") else "NOT SET",
+        "DATABASE_URL": "SET" if (os.getenv("SUPABASE_DATABASE_URL") or os.getenv("DATABASE_URL")) else "NOT SET",
+        "WHATSAPP_PHONE_NUMBER_ID": "SET" if os.getenv("WHATSAPP_PHONE_NUMBER_ID") else "NOT SET",
+        "ANTHROPIC_API_KEY": "SET" if os.getenv("ANTHROPIC_API_KEY") else "NOT SET",
+    }
+
+
+# ---------------------------------------------------------------------------
 # WhatsApp webhook
 # ---------------------------------------------------------------------------
 
