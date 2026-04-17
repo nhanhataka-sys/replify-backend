@@ -20,11 +20,6 @@ async def run_daily_bulletin() -> None:
 
     logger.info("Daily bulletin job started")
 
-    news_api_key = os.getenv("NEWS_API_KEY", "")
-    if not news_api_key:
-        logger.warning("NEWS_API_KEY not set — skipping bulletin")
-        return
-
     sa_articles: list[dict] = []
     global_articles: list[dict] = []
     message = ""
@@ -35,8 +30,8 @@ async def run_daily_bulletin() -> None:
 
     try:
         sa_articles, global_articles = await asyncio.gather(
-            fetch_sa_news(news_api_key),
-            fetch_global_news(news_api_key),
+            fetch_sa_news(),
+            fetch_global_news(),
         )
         logger.info("Fetched %d SA and %d global articles", len(sa_articles), len(global_articles))
 
