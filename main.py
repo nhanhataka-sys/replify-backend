@@ -525,11 +525,12 @@ async def get_my_business(user_id: str):
 # ---------------------------------------------------------------------------
 
 def _bulletin_dict(b) -> dict:
+    messages: list = b.tweets or []
     return {
         "id": str(b.id),
         "date": b.bulletin_date.isoformat(),
-        "tweets": b.tweets,
-        "tweet_ids": b.tweet_ids,
+        "message": messages[0] if messages else None,
+        "sent_to": b.tweet_ids,
         "posted": b.posted,
         "posted_at": b.posted_at.isoformat() if b.posted_at else None,
         "error_message": b.error_message,
@@ -546,9 +547,9 @@ async def trigger_bulletin():
 
 @app.post("/api/bulletin/preview")
 async def preview_bulletin():
-    """Generate a bulletin preview (fetch news + format with AI) without posting to X."""
+    """Generate a bulletin preview (fetch news + format with AI) without sending to WhatsApp."""
     from services.news_service import fetch_sa_news, fetch_global_news
-    from services.bulletin_service import generate_bulletin_thread
+    from services.bulletin_service import generate_bulletin
 
     news_api_key = os.getenv("NEWS_API_KEY", "")
     if not news_api_key:
@@ -558,11 +559,11 @@ async def preview_bulletin():
         fetch_sa_news(news_api_key),
         fetch_global_news(news_api_key),
     )
-    tweets = await generate_bulletin_thread(sa_articles, global_articles)
+    message = await generate_bulletin(sa_articles, global_articles)
 
     return {
-        "tweets": tweets,
-        "tweet_count": len(tweets),
+        "message": message,
+        "character_count": len(message),
         "sa_articles": sa_articles,
         "global_articles": global_articles,
     }

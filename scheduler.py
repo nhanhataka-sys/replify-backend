@@ -13,8 +13,8 @@ scheduler = AsyncIOScheduler(timezone="Africa/Johannesburg")
 
 async def run_daily_bulletin() -> None:
     from services.news_service import fetch_sa_news, fetch_global_news
-    from services.bulletin_service import generate_bulletin_thread
-    from services.twitter_service import post_thread
+    from services.bulletin_service import generate_bulletin
+    from services.whatsapp_bulletin_service import send_bulletin
     from database.connection import AsyncSessionLocal
     from database.models import NewsBulletin
 
@@ -27,8 +27,8 @@ async def run_daily_bulletin() -> None:
 
     sa_articles: list[dict] = []
     global_articles: list[dict] = []
-    tweets: list[str] = []
-    tweet_ids: list[str] | None = None
+    message = ""
+    sent_to: list[str] = []
     posted = False
     posted_at: datetime | None = None
     error_message: str | None = None
@@ -40,40 +40,36 @@ async def run_daily_bulletin() -> None:
         )
         logger.info("Fetched %d SA and %d global articles", len(sa_articles), len(global_articles))
 
-        tweets = await generate_bulletin_thread(sa_articles, global_articles)
-        logger.info("Generated %d-tweet bulletin", len(tweets))
+        message = await generate_bulletin(sa_articles, global_articles)
+        logger.info("Bulletin generated (%d chars)", len(message))
 
-        twitter_key = os.getenv("TWITTER_API_KEY")
-        twitter_secret = os.getenv("TWITTER_API_SECRET")
-        twitter_at = os.getenv("TWITTER_ACCESS_TOKEN")
-        twitter_at_secret = os.getenv("TWITTER_ACCESS_TOKEN_SECRET")
+        phone_number_id = os.getenv("WHATSAPP_PHONE_NUMBER_ID", "")
+        access_token = os.getenv("WHATSAPP_ACCESS_TOKEN", "")
+        recipients_raw = os.getenv("BULLETIN_WHATSAPP_TO", "")
+        recipients = [r.strip() for r in recipients_raw.split(",") if r.strip()]
 
-        if all([twitter_key, twitter_secret, twitter_at, twitter_at_secret]):
-            tweet_ids = await asyncio.to_thread(
-                post_thread,
-                tweets,
-                api_key=twitter_key,
-                api_secret=twitter_secret,
-                access_token=twitter_at,
-                access_token_secret=twitter_at_secret,
-            )
-            posted = True
-            posted_at = datetime.utcnow()
-            logger.info("Bulletin posted as thread of %d tweets", len(tweet_ids))
+        if phone_number_id and access_token and recipients:
+            sent_to = await send_bulletin(message, recipients, phone_number_id, access_token)
+            posted = bool(sent_to)
+            posted_at = datetime.utcnow() if posted else None
+            logger.info("Bulletin sent to %d/%d recipients", len(sent_to), len(recipients))
         else:
-            logger.warning("Twitter credentials not fully configured — bulletin saved but not posted")
+            logger.warning(
+                "WhatsApp credentials or BULLETIN_WHATSAPP_TO not configured — "
+                "bulletin generated but not sent"
+            )
 
     except Exception as exc:
         error_message = str(exc)
         logger.exception("Daily bulletin job failed: %s", exc)
 
-    if tweets or error_message:
+    if message or error_message:
         try:
             async with AsyncSessionLocal() as db:
                 bulletin = NewsBulletin(
                     bulletin_date=date.today(),
-                    tweets=tweets,
-                    tweet_ids=tweet_ids,
+                    tweets=[message] if message else [],   # single message stored in list
+                    tweet_ids=sent_to or None,
                     sa_articles=sa_articles,
                     global_articles=global_articles,
                     posted=posted,
