@@ -551,9 +551,13 @@ async def preview_bulletin():
     from services.news_service import fetch_sa_news, fetch_global_news
     from services.bulletin_service import generate_bulletin
 
+    gnews_api_key = os.getenv("GNEWS_API_KEY", "")
+    if not gnews_api_key:
+        raise HTTPException(status_code=503, detail="GNEWS_API_KEY not configured")
+
     sa_articles, global_articles = await asyncio.gather(
-        fetch_sa_news(),
-        fetch_global_news(),
+        fetch_sa_news(gnews_api_key),
+        fetch_global_news(gnews_api_key),
     )
     message = await generate_bulletin(sa_articles, global_articles)
 
