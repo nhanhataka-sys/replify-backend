@@ -1,7 +1,7 @@
 import uuid
 from sqlalchemy import (
-    Boolean, Column, DateTime, ForeignKey,
-    String, Text, func,
+    Boolean, Column, Date, DateTime, ForeignKey,
+    JSON, String, Text, func,
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
@@ -81,3 +81,18 @@ class Message(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     conversation = relationship("Conversation", back_populates="messages")
+
+
+class NewsBulletin(Base):
+    __tablename__ = "news_bulletins"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    bulletin_date = Column(Date, nullable=False, unique=True)
+    tweets = Column(JSON, nullable=False, default=list)
+    tweet_ids = Column(JSON, nullable=True)
+    sa_articles = Column(JSON, nullable=True)
+    global_articles = Column(JSON, nullable=True)
+    posted = Column(Boolean, nullable=False, default=False)
+    posted_at = Column(DateTime(timezone=True), nullable=True)
+    error_message = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)

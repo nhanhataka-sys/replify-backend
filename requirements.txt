@@ -6,3 +6,5 @@ psycopg2-binary
 anthropic
 httpx
 python-dotenv
+tweepy>=4.14.0
+apscheduler>=3.10.0

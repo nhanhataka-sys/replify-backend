@@ -1,3 +1,4 @@
+import asyncio
 import os
 import logging
 import uuid
@@ -30,6 +31,7 @@ from services.conversation_service import (
     flag_for_human,
 )
 from ai_engine import generate_reply
+from scheduler import start_scheduler, stop_scheduler, run_daily_bulletin
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -56,7 +58,9 @@ async def lifespan(app: FastAPI):
             await seed_demo_business(db)
     except Exception as e:
         logger.warning("DB init skipped (no database connection): %s", e)
+    start_scheduler()
     yield
+    stop_scheduler()
 
 
 # ---------------------------------------------------------------------------
@@ -514,3 +518,84 @@ async def get_my_business(user_id: str):
             for i in business.catalogue_items
         ],
     }
+
+
+# ---------------------------------------------------------------------------
+# News Bulletin
+# ---------------------------------------------------------------------------
+
+def _bulletin_dict(b) -> dict:
+    return {
+        "id": str(b.id),
+        "date": b.bulletin_date.isoformat(),
+        "tweets": b.tweets,
+        "tweet_ids": b.tweet_ids,
+        "posted": b.posted,
+        "posted_at": b.posted_at.isoformat() if b.posted_at else None,
+        "error_message": b.error_message,
+        "created_at": b.created_at.isoformat(),
+    }
+
+
+@app.post("/api/bulletin/trigger")
+async def trigger_bulletin():
+    """Manually trigger the daily bulletin job in the background."""
+    asyncio.create_task(run_daily_bulletin())
+    return {"status": "triggered"}
+
+
+@app.post("/api/bulletin/preview")
+async def preview_bulletin():
+    """Generate a bulletin preview (fetch news + format with AI) without posting to X."""
+    from services.news_service import fetch_sa_news, fetch_global_news
+    from services.bulletin_service import generate_bulletin_thread
+
+    news_api_key = os.getenv("NEWS_API_KEY", "")
+    if not news_api_key:
+        raise HTTPException(status_code=503, detail="NEWS_API_KEY not configured")
+
+    sa_articles, global_articles = await asyncio.gather(
+        fetch_sa_news(news_api_key),
+        fetch_global_news(news_api_key),
+    )
+    tweets = await generate_bulletin_thread(sa_articles, global_articles)
+
+    return {
+        "tweets": tweets,
+        "tweet_count": len(tweets),
+        "sa_articles": sa_articles,
+        "global_articles": global_articles,
+    }
+
+
+@app.get("/api/bulletin/latest")
+async def get_latest_bulletin():
+    """Return the most recently generated bulletin."""
+    from database.models import NewsBulletin
+
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            select(NewsBulletin).order_by(NewsBulletin.created_at.desc()).limit(1)
+        )
+        bulletin = result.scalar_one_or_none()
+
+    if not bulletin:
+        raise HTTPException(status_code=404, detail="No bulletins generated yet")
+
+    return _bulletin_dict(bulletin)
+
+
+@app.get("/api/bulletin/history")
+async def get_bulletin_history(limit: int = 10):
+    """Return recent bulletin history (max 50 records)."""
+    from database.models import NewsBulletin
+
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            select(NewsBulletin)
+            .order_by(NewsBulletin.created_at.desc())
+            .limit(min(limit, 50))
+        )
+        bulletins = result.scalars().all()
+
+    return [_bulletin_dict(b) for b in bulletins]
